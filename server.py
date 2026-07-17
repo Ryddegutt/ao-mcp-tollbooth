@@ -212,4 +212,5 @@ async def get_ao_process_triage(process_id: str) -> dict:
             "error": str(e)
         }
 
-mcp.run(transport="stdio")
+if __name__ == "__main__":
+    mcp.run(transport="stdio")
