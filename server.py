@@ -56,7 +56,7 @@ async def get_ao_process_metadata(process_id: str) -> str:
     """Henter metadata for en spesifikk AO-prosess."""
     query = """
     query($id: ID!) {
-      transactions(ids: [$id], tags: [{name: "App-Name", values: ["aos"]}]) {
+      transactions(ids: [$id]) {
         edges {
           node {
             tags {
@@ -99,8 +99,10 @@ async def get_ao_process_activity(process_id: str) -> str:
     query = """
     query($id: String!) {
       transactions(
-        owners: [$id]
-        tags: [{name: "Recipient", values: [$id]}]
+        tags: [
+          {name: "Data-Protocol", values: ["ao"]}
+          {name: "Process", values: [$id]}
+        ]
         first: 5
         sort: HEIGHT_DESC
       ) {
@@ -164,18 +166,22 @@ async def get_ao_process_triage(process_id: str) -> dict:
         metadata_score = 0
         if metadata and "No metadata" not in metadata:
             metadata_score = 50  # Basispoeng for å ha metadata
-            if "Data-Protocol" in metadata:
-                metadata_score += 10
+            if "Data-Protocol: ao" in metadata:
+                metadata_score += 20
+            if "Variant: ao.TN.1" in metadata:
+                metadata_score += 15
             if "Content-Type" in metadata:
-                metadata_score += 10
+                metadata_score += 15
         
         # Analyse aktivitet
         activity_score = 0
         if activity and "No recent activity" not in activity:
             activity_lines = activity.split("\n")
-            activity_score = min(len(activity_lines) * 10, 30)  # Maks 30 poeng for aktivitet
-            # Ekstra poeng for nylig aktivitet
-            if "Relevance: message" in activity:
+            activity_score = min(len(activity_lines) * 15, 45)  # Maks 45 poeng for aktivitet
+            # Ekstra poeng for spesifikke meldingstyper
+            if "Type: message" in activity:
+                activity_score += 15
+            if "Type: credit-notice" in activity:
                 activity_score += 10
         
         # Beregn total score
