@@ -59,6 +59,11 @@ async def get_ao_process_metadata(process_id: str) -> str:
       transactions(ids: [$id]) {
         edges {
           node {
+            id
+            block {
+              timestamp
+              height
+            }
             tags {
               name
               value
@@ -100,7 +105,6 @@ async def get_ao_process_activity(process_id: str) -> str:
     query($id: String!) {
       transactions(
         tags: [
-          {name: "Data-Protocol", values: ["ao"]}
           {name: "Process", values: [$id]}
         ]
         first: 5
@@ -109,6 +113,10 @@ async def get_ao_process_activity(process_id: str) -> str:
         edges {
           node {
             id
+            block {
+              timestamp
+              height
+            }
             tags {
               name
               value
@@ -165,24 +173,17 @@ async def get_ao_process_triage(process_id: str) -> dict:
         # Analyse metadata
         metadata_score = 0
         if metadata and "No metadata" not in metadata:
-            metadata_score = 50  # Basispoeng for å ha metadata
-            if "Data-Protocol: ao" in metadata:
-                metadata_score += 20
-            if "Variant: ao.TN.1" in metadata:
-                metadata_score += 15
-            if "Content-Type" in metadata:
-                metadata_score += 15
+            metadata_score = 50  # Basispoeng for å ha noen data
+            # Gi poeng for enhver metadata vi finner
+            metadata_score += min(metadata.count(':'), 50)  # Maks 50 ekstra poeng
         
         # Analyse aktivitet
         activity_score = 0
         if activity and "No recent activity" not in activity:
             activity_lines = activity.split("\n")
-            activity_score = min(len(activity_lines) * 15, 45)  # Maks 45 poeng for aktivitet
-            # Ekstra poeng for spesifikke meldingstyper
-            if "Type: message" in activity:
-                activity_score += 15
-            if "Type: credit-notice" in activity:
-                activity_score += 10
+            activity_score = min(len(activity_lines) * 20, 60)  # Maks 60 poeng for aktivitet
+            # Gi poeng for enhver aktivitet
+            activity_score += min(activity.count(':'), 40)  # Maks 40 ekstra poeng
         
         # Beregn total score
         alpha_score = min(metadata_score + activity_score, 100)
