@@ -147,4 +147,69 @@ async def get_ao_process_activity(process_id: str) -> str:
         logger.error(f"Error retrieving activity for process {process_id}: {str(e)}")
         return f"Error retrieving activity for process {process_id}: {str(e)}"
 
+@mcp.tool()
+async def get_ao_process_triage(process_id: str) -> dict:
+    """Utfører en helseundersøkelse på en AO-prosess og returnerer Alpha-Score og oppsummering."""
+    try:
+        # Hent både metadata og aktivitet samtidig
+        metadata_task = get_ao_process_metadata(process_id)
+        activity_task = get_ao_process_activity(process_id)
+        
+        metadata, activity = await asyncio.gather(metadata_task, activity_task)
+        
+        # Initialiser score
+        alpha_score = 0
+        
+        # Analyse metadata
+        metadata_score = 0
+        if metadata and "No metadata" not in metadata:
+            metadata_score = 50  # Basispoeng for å ha metadata
+            if "Data-Protocol" in metadata:
+                metadata_score += 10
+            if "Content-Type" in metadata:
+                metadata_score += 10
+        
+        # Analyse aktivitet
+        activity_score = 0
+        if activity and "No recent activity" not in activity:
+            activity_lines = activity.split("\n")
+            activity_score = min(len(activity_lines) * 10, 30)  # Maks 30 poeng for aktivitet
+            # Ekstra poeng for nylig aktivitet
+            if "Relevance: message" in activity:
+                activity_score += 10
+        
+        # Beregn total score
+        alpha_score = min(metadata_score + activity_score, 100)
+        
+        # Generer oppsummering
+        summary = []
+        if alpha_score >= 80:
+            summary.append("Prosessen er i utmerket helsetilstand med høy aktivitet.")
+        elif alpha_score >= 50:
+            summary.append("Prosessen er i god helsetilstand med moderat aktivitet.")
+        else:
+            summary.append("Prosessen viser tegn på lav aktivitet eller manglende metadata.")
+        
+        if "No metadata" in metadata:
+            summary.append("Advarsel: Mangler metadata.")
+        if "No recent activity" in activity:
+            summary.append("Advarsel: Ingen nylig aktivitet detektert.")
+        
+        return {
+            "process_id": process_id,
+            "alpha_score": alpha_score,
+            "summary": " ".join(summary),
+            "metadata": metadata,
+            "recent_activity": activity
+        }
+    
+    except Exception as e:
+        logger.error(f"Error during triage for process {process_id}: {str(e)}")
+        return {
+            "process_id": process_id,
+            "alpha_score": 0,
+            "summary": "Kunne ikke utføre helseundersøkelse på grunn av teknisk feil.",
+            "error": str(e)
+        }
+
 mcp.run(transport="stdio")
