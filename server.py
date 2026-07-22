@@ -51,6 +51,7 @@ async def inspect_ao_process(process_id: str) -> str:
     try:
         return await fetch_arweave_data()
     except Exception as e:
+        print(f"\nDEBUG ERROR in inspect_ao_process: {e}")
         logger.error(f"Error verifying AO Process {process_id}: {str(e)}")
         return f"AO Process {process_id} could not be verified on-chain (it might be newly created or invalid)."
 
@@ -101,6 +102,7 @@ async def get_ao_process_metadata(process_id: str) -> str:
     try:
         return await fetch_arweave_data()
     except Exception as e:
+        print(f"\nDEBUG ERROR in get_ao_process_metadata: {e}")
         logger.error(f"Error fetching metadata for process {process_id}: {str(e)}")
         return f"No metadata found for process {process_id}."
 @mcp.tool()
@@ -161,6 +163,7 @@ async def get_ao_process_activity(process_id: str) -> str:
     try:
         return await fetch_arweave_data()
     except Exception as e:
+        print(f"\nDEBUG ERROR in get_ao_process_activity: {e}")
         logger.error(f"Error retrieving activity for process {process_id}: {str(e)}")
         return f"Error retrieving activity for process {process_id}: {str(e)}"
 
@@ -218,6 +221,7 @@ async def get_ao_process_triage(process_id: str) -> dict:
         }
     
     except Exception as e:
+        print(f"\nDEBUG ERROR in get_ao_process_triage: {e}")
         logger.error(f"Error during triage for process {process_id}: {str(e)}")
         return {
             "process_id": process_id,
