@@ -1,6 +1,7 @@
 import asyncio
 import aiohttp
 import backoff
+import json
 from mcp.server.fastmcp import FastMCP
 import logging
 
@@ -41,6 +42,8 @@ async def inspect_ao_process(process_id: str) -> str:
             ) as response:
                 response.raise_for_status()
                 data = await response.json()
+                print("\nDEBUG - inspect_ao_process raw response:")
+                print(json.dumps(data, indent=2))
                 if data.get("data", {}).get("transactions", {}).get("edges"):
                     return f"AO Process {process_id} found on-chain. Type: aos."
                 return f"AO Process {process_id} could not be verified on-chain (it might be newly created or invalid)."
@@ -87,6 +90,8 @@ async def get_ao_process_metadata(process_id: str) -> str:
             ) as response:
                 response.raise_for_status()
                 data = await response.json()
+                print("\nDEBUG - get_ao_process_metadata raw response:")
+                print(json.dumps(data, indent=2))
                 edges = data.get("data", {}).get("transactions", {}).get("edges")
                 if edges:
                     tags = edges[0]["node"]["tags"]
@@ -140,6 +145,8 @@ async def get_ao_process_activity(process_id: str) -> str:
             ) as response:
                 response.raise_for_status()
                 data = await response.json()
+                print("\nDEBUG - get_ao_process_activity raw response:")
+                print(json.dumps(data, indent=2))
                 edges = data.get("data", {}).get("transactions", {}).get("edges")
                 if edges:
                     activity_summary = []
