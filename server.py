@@ -18,10 +18,8 @@ mcp = FastMCP("ao-tollbooth")
 async def inspect_ao_process(process_id: str) -> str:
     """Inspekterer en spesifikk AO-prosess og returnerer status."""
     query = """
-    query($id: String!) {
-      transactions(tags: [
-        {name: "Process", values: [$id]}
-      ], first: 1) {
+    query($id: ID!) {
+      transactions(ids: [$id]) {
         edges {
           node {
             id
