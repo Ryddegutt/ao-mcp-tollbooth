@@ -10,10 +10,11 @@ async def find_live_ao_process():
     {
       transactions(
         tags: [{name: "Data-Protocol", values: ["ao"]}]
-        first: 1
+        first: 10
       ) {
         edges {
           node {
+            id
             tags {
               name
               value
@@ -33,10 +34,22 @@ async def find_live_ao_process():
             data = await response.json()
             edges = data.get("data", {}).get("transactions", {}).get("edges")
             if edges:
-                for tag in edges[0]["node"]["tags"]:
-                    if tag["name"] == "Process":
-                        return tag["value"]
-    raise Exception("No live AO process found")
+                # First try to find a Process tag
+                for edge in edges:
+                    for tag in edge["node"]["tags"]:
+                        if tag["name"] == "Process":
+                            return tag["value"]
+                
+                # If no Process tag found, look for Type: Process
+                for edge in edges:
+                    for tag in edge["node"]["tags"]:
+                        if tag["name"] == "Type" and tag["value"] == "Process":
+                            return edge["node"]["id"]
+                
+                # Fallback to first transaction ID
+                return edges[0]["node"]["id"]
+                
+    raise Exception("No live AO process found in last 10 transactions")
 
 async def run_triage(process_id):
     return await get_ao_process_triage(process_id)
