@@ -10,6 +10,7 @@ async def find_live_ao_process():
     {
       transactions(
         tags: [{name: "Data-Protocol", values: ["ao"]}]
+        sort: HEIGHT_DESC
         first: 10
       ) {
         edges {
@@ -38,8 +39,8 @@ async def find_live_ao_process():
                         if tag["name"] == "Process" and len(tag["value"]) == 43:
                             return tag["value"]
     
-    # Fallback to AO Credit token process if no active process found
-    return "Sa0iA-2MavBNM0y_2aweJ252sqEBAC23A3C08ACfLw2"
+    # Fallback to mainnet AO process if no active process found
+    return "qNvAoz0TgcH7DMg8BCVn8jF32QH5L6T29VjHxhHqqGE"
 
 async def run_triage(process_id):
     return await get_ao_process_triage(process_id)
