@@ -11,7 +11,6 @@ async def find_live_ao_process():
       transactions(
         tags: [{name: "Data-Protocol", values: ["ao"]}]
         first: 1
-        sort: HEIGHT_DESC
       ) {
         edges {
           node {
