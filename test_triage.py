@@ -9,7 +9,10 @@ async def find_live_ao_process():
     query = """
     {
       transactions(
-        tags: [{name: "App-Name", values: ["aos"]}]
+        tags: [
+          {name: "Data-Protocol", values: ["ao"]},
+          {name: "Type", values: ["Process"]}
+        ]
         first: 5
       ) {
         edges {
