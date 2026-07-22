@@ -8,7 +8,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-ARWEAVE_GRAPHQL_URL = "https://arweave.net/graphql"
+ARWEAVE_GRAPHQL_URL = "https://arweave-search.goldsky.com/graphql"
 
 # Initialiser MCP-serveren
 mcp = FastMCP("ao-tollbooth")
