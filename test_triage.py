@@ -5,19 +5,19 @@ import aiohttp
 from server import get_ao_process_triage, ARWEAVE_GRAPHQL_URL
 
 async def find_live_ao_process():
-    """Find a real AO process by searching for App-Name: aos"""
+    """Find an actively used AO process by searching for recent messages"""
     query = """
     {
       transactions(
-        tags: [
-          {name: "Data-Protocol", values: ["ao"]},
-          {name: "Type", values: ["Process"]}
-        ]
-        first: 5
+        tags: [{name: "Data-Protocol", values: ["ao"]}]
+        first: 10
       ) {
         edges {
           node {
-            id
+            tags {
+              name
+              value
+            }
           }
         }
       }
@@ -34,10 +34,12 @@ async def find_live_ao_process():
             edges = data.get("data", {}).get("transactions", {}).get("edges")
             if edges:
                 for edge in edges:
-                    node_id = edge["node"]["id"]
-                    if len(node_id) == 43:  # Only return valid 43-char Arweave IDs
-                        return node_id
-    raise Exception("No valid AO process found (no 43-char transaction IDs returned)")
+                    for tag in edge["node"]["tags"]:
+                        if tag["name"] == "Process" and len(tag["value"]) == 43:
+                            return tag["value"]
+    
+    # Fallback to AO Credit token process if no active process found
+    return "Sa0iA-2MavBNM0y_2aweJ252sqEBAC23A3C08ACfLw2"
 
 async def run_triage(process_id):
     return await get_ao_process_triage(process_id)
