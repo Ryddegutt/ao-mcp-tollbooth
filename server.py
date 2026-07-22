@@ -20,8 +20,7 @@ async def inspect_ao_process(process_id: str) -> str:
     query = """
     query($id: String!) {
       transactions(tags: [
-        {name: "Process", values: [$id]},
-        {name: "App-Name", values: ["aos"]}
+        {name: "Process", values: [$id]}
       ], first: 1) {
         edges {
           node {
