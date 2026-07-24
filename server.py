@@ -234,6 +234,7 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
       ) {
         edges {
           node {
+            id
             tags {
               name
               value
@@ -269,11 +270,12 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
         for edge in edges:
             node = edge["node"]
             # Consider transaction ID itself as candidate
-            if len(node["id"]) == 43:
-                candidate_pids.add(node["id"])
+            node_id = node.get("id", "")
+            if len(node_id) == 43:
+                candidate_pids.add(node_id)
             # Check all tag values
-            for tag in node["tags"]:
-                value = tag["value"]
+            for tag in node.get("tags", []):
+                value = tag.get("value", "")
                 if len(value) == 43:
                     candidate_pids.add(value)
         
@@ -282,6 +284,8 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
             "TZ7oYyD_3NlXqW3q3eJ3bN3gZk7q3q3eJ3bN3gZk7q3q3eJ3bN3gZk"  # Example module contract
         }
         candidate_pids -= known_non_processes
+        
+        logger.info(f"Candidate PIDs before filtering: {candidate_pids}")
         
         # Convert to list and take up to 'limit' unique ones
         unique_process_ids = list(candidate_pids)[:limit]
