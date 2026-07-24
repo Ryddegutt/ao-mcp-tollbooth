@@ -329,6 +329,7 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
         
         # Filter out processes with alpha_score 0
         active_processes = []
+        active_ids = set()
         for res in triage_results:
             if res.get("alpha_score", 0) > 0:
                 active_processes.append({
@@ -336,24 +337,26 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
                     "alpha_score": res["alpha_score"],
                     "summary": res["summary"]
                 })
+                active_ids.add(res["process_id"])
         
         # If we have fewer active processes than limit, fill from fallback
         if len(active_processes) < limit:
-            # Get active process IDs to avoid duplicates
-            active_ids = {p["process_id"] for p in active_processes}
-            # Take fallback processes not already in active_processes
-            for pid in fallback_pids:
-                if pid not in active_ids:
-                    res = await get_ao_process_triage(pid)
-                    if res.get("alpha_score", 0) > 0:
+            # Collect fallback processes not already in active_processes
+            needed_fallback = [pid for pid in fallback_pids if pid not in active_ids]
+            if needed_fallback:
+                # Run triage for fallback processes in parallel
+                fallback_tasks = [get_ao_process_triage(pid) for pid in needed_fallback]
+                fallback_results = await asyncio.gather(*fallback_tasks)
+                for res in fallback_results:
+                    if len(active_processes) >= limit:
+                        break
+                    if res.get("alpha_score", 0) > 0 and res["process_id"] not in active_ids:
                         active_processes.append({
                             "process_id": res["process_id"],
                             "alpha_score": res["alpha_score"],
                             "summary": res["summary"]
                         })
-                        active_ids.add(pid)  # Update to avoid duplicates
-                        if len(active_processes) >= limit:
-                            break
+                        active_ids.add(res["process_id"])
         
         # Return exactly 'limit' processes
         final_processes = active_processes[:limit]
