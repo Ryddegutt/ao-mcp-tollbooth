@@ -265,25 +265,29 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
         if not edges:
             return []
         
-        # Collect all candidate process IDs from valid tags
+        # Collect all candidate process IDs from valid tags (case-insensitive)
         candidate_pids = []
         valid_tag_names = ["Process", "Target", "From-Process", "Recipient"]
+        valid_tag_names_lower = [name.lower() for name in valid_tag_names]
         
         for edge in edges:
             node = edge["node"]
             tags = node.get("tags", [])
             
-            # Check if this is a Process creation transaction (Type=Process)
-            is_process_creation = any(tag.get("name") == "Type" and tag.get("value") == "Process" for tag in tags)
+            # Check if this is a Process creation transaction (Type=Process) - case-insensitive
+            is_process_creation = any(
+                tag.get("name", "").lower() == "type" and tag.get("value", "").lower() == "process" 
+                for tag in tags
+            )
             node_id = node.get("id", "")
             if is_process_creation and len(node_id) == 43:
                 candidate_pids.append(node_id)
             
-            # Check for valid tags
+            # Check for valid tags (case-insensitive)
             for tag in tags:
                 tag_name = tag.get("name", "")
                 tag_value = tag.get("value", "")
-                if tag_name in valid_tag_names and len(tag_value) == 43:
+                if tag_name.lower() in valid_tag_names_lower and len(tag_value) == 43:
                     candidate_pids.append(tag_value)
         
         # Count occurrences of each PID
@@ -310,21 +314,20 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
         logger.info(f"Fetched {len(edges)} transactions, found {len(pid_counter)} candidate process IDs")
         logger.info(f"Top 20 candidate processes: {candidate_pids}")
         
-        # If no candidates found, use fallback list
-        if not candidate_pids:
-            logger.warning("No candidate process IDs found, using fallback list")
-            fallback_pids = [
-                "qNvAoz0TgcH7DMg8BCVn8jF32QH5L6T29VjHxhHqqGE",  # Mainnet AO
-                "UOLxq8qA0LfdgFvY8rQeTgrjdbhG5_0x9VYFhHyuJXc",  # Known active process
-                "VFr3Bk-uM-motpNNkkF8sipY1K-sy8ULuGjQh4akgqY"   # Another active process
-            ]
-            candidate_pids = fallback_pids[:min(limit, len(fallback_pids))]
+        # Define fallback list with 5 known active processes
+        fallback_pids = [
+            "qNvAoz0TgcH7DMg8BCVn8jF32QH5L6T29VjHxhHqqGE",  # Mainnet AO
+            "NGa_4-iSCnUE6UQ6xir2mnqGiRB0Cje4G3AA3FGXsZw",   # Known active process
+            "0zPkVRBOUf8O6R9SqDEQZVYcaPO2bf2Z4cKLcheF_RM",   # Another active process
+            "0Kispy43fkzf_CqA0NqnYEg7KfrLWoiiDZ_rHgnwGR0",   # Another active process
+            "VFr3Bk-uM-motpNNkkF8sipY1K-sy8ULuGjQh4akgqY"    # Another active process
+        ]
         
         # Run triage for each candidate process
         triage_tasks = [get_ao_process_triage(pid) for pid in candidate_pids]
         triage_results = await asyncio.gather(*triage_tasks)
         
-        # Filter out processes with alpha_score 0 and take up to 'limit'
+        # Filter out processes with alpha_score 0
         active_processes = []
         for res in triage_results:
             if res.get("alpha_score", 0) > 0:
@@ -333,11 +336,29 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
                     "alpha_score": res["alpha_score"],
                     "summary": res["summary"]
                 })
-                if len(active_processes) >= limit:
-                    break
         
-        logger.info(f"Found {len(active_processes)} active processes")
-        return active_processes
+        # If we have fewer active processes than limit, fill from fallback
+        if len(active_processes) < limit:
+            # Get active process IDs to avoid duplicates
+            active_ids = {p["process_id"] for p in active_processes}
+            # Take fallback processes not already in active_processes
+            for pid in fallback_pids:
+                if pid not in active_ids:
+                    res = await get_ao_process_triage(pid)
+                    if res.get("alpha_score", 0) > 0:
+                        active_processes.append({
+                            "process_id": res["process_id"],
+                            "alpha_score": res["alpha_score"],
+                            "summary": res["summary"]
+                        })
+                        active_ids.add(pid)  # Update to avoid duplicates
+                        if len(active_processes) >= limit:
+                            break
+        
+        # Return exactly 'limit' processes
+        final_processes = active_processes[:limit]
+        logger.info(f"Returning {len(final_processes)} active processes")
+        return final_processes
     
     except Exception as e:
         logger.error(f"Error scanning recent AO processes: {str(e)}")
