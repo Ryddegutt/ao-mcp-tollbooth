@@ -265,32 +265,60 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
         if not edges:
             return []
         
-        # Extract candidate process IDs: any 43-character string in tags or transaction ID
-        candidate_pids = set()
+        # Count occurrences of each process ID and track sources
+        pid_counter = {}
+        pid_sources = {}
+        
         for edge in edges:
             node = edge["node"]
             # Consider transaction ID itself as candidate
             node_id = node.get("id", "")
             if len(node_id) == 43:
-                candidate_pids.add(node_id)
+                pid_counter[node_id] = pid_counter.get(node_id, 0) + 1
+                pid_sources[node_id] = pid_sources.get(node_id, set()) | {"transaction_id"}
+            
             # Check all tag values
             for tag in node.get("tags", []):
                 value = tag.get("value", "")
                 if len(value) == 43:
-                    candidate_pids.add(value)
+                    pid_counter[value] = pid_counter.get(value, 0) + 1
+                    source_name = tag.get("name", "")
+                    pid_sources[value] = pid_sources.get(value, set()) | {source_name}
         
-        # Filter out known non-process IDs (like module contracts)
+        # Filter out known non-process IDs and invalid patterns
         known_non_processes = {
-            "TZ7oYyD_3NlXqW3q3eJ3bN3gZk7q3q3eJ3bN3gZk7q3q3eJ3bN3gZk"  # Example module contract
+            "TZ7oYyD_3NlXqW3q3eJ3bN3gZk7q3q3eJ3bN3gZk7q3q3eJ3bN3gZk",  # Example module contract
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"  # All A's pattern
         }
-        candidate_pids -= known_non_processes
+        # Also filter out any PID that's all the same character
+        filtered_pids = [
+            pid for pid in pid_counter
+            if pid not in known_non_processes 
+            and not all(c == pid[0] for c in pid)
+        ]
         
-        logger.info(f"Candidate PIDs before filtering: {candidate_pids}")
+        # Assign priority scores based on source tags
+        priority_scores = []
+        for pid in filtered_pids:
+            sources = pid_sources.get(pid, set())
+            priority = 0
+            if "Process" in sources:
+                priority = 3
+            elif "Target" in sources:
+                priority = 2
+            elif "Recipient" in sources or "From-Process" in sources:
+                priority = 1
+            
+            priority_scores.append((pid, pid_counter[pid], priority))
         
-        # Convert to list and take up to 'limit' unique ones
-        unique_process_ids = list(candidate_pids)[:limit]
+        # Sort by frequency (descending) then priority (descending)
+        priority_scores.sort(key=lambda x: (-x[1], -x[2]))
         
-        logger.info(f"Fetched {len(edges)} transactions, found {len(candidate_pids)} candidate process IDs, using {len(unique_process_ids)}")
+        # Take top 'limit' unique ones
+        unique_process_ids = [pid for pid, _, _ in priority_scores[:limit]]
+        
+        logger.info(f"Fetched {len(edges)} transactions, found {len(pid_counter)} candidate process IDs")
+        logger.info(f"Top {limit} processes: {unique_process_ids}")
         
         # If no candidates found, use fallback list
         if not unique_process_ids:
