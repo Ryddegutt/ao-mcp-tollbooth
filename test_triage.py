@@ -48,6 +48,9 @@ async def run_triage(process_id):
 async def run_scan(limit):
     return await scan_recent_ao_alpha(limit)
 
+async def run_detailed_triage(process_id):
+    return await triage_process(process_id)
+
 async def main():
     if len(sys.argv) > 1:
         if sys.argv[1] == "scan":
@@ -55,9 +58,14 @@ async def main():
             print(f"Scanning {limit} recent AO processes...")
             result = await run_scan(limit)
             print(json.dumps(result, indent=2))
+        elif sys.argv[1] == "triage":
+            process_id = sys.argv[2] if len(sys.argv) > 2 else "qNvAoz0TgcH7DMg8BCVn8jF32QH5L6T29VjHxhHqqGE"
+            print(f"Running detailed triage for process: {process_id}")
+            result = await run_detailed_triage(process_id)
+            print(json.dumps(result, indent=2))
         else:
             process_id = sys.argv[1]
-            print(f"Running triage for process: {process_id}")
+            print(f"Running basic triage for process: {process_id}")
             result = await run_triage(process_id)
             print(json.dumps(result, indent=2))
     else:

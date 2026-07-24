@@ -223,6 +223,146 @@ async def get_ao_process_triage(process_id: str) -> dict:
         }
 
 @mcp.tool()
+async def triage_process(process_id: str) -> dict:
+    """Utfører en detaljert helseundersøkelse på en AO-prosess basert på aktivitet."""
+    query = """
+    query($pid: String!) {
+      transactions(
+        tags: [
+          {name: "Data-Protocol", values: ["ao"]},
+          {operator: OR, tags: [
+            {name: "From-Process", values: [$pid]},
+            {name: "Target", values: [$pid]},
+            {name: "Recipient", values: [$pid]}
+          ]}
+        ]
+        sort: HEIGHT_DESC
+        first: 20
+      ) {
+        edges {
+          node {
+            id
+            block {
+              height
+              timestamp
+            }
+            tags {
+              name
+              value
+            }
+          }
+        }
+      }
+    }
+    """
+    variables = {"pid": process_id}
+    
+    @backoff.on_exception(backoff.expo,
+                        (aiohttp.ClientError, asyncio.TimeoutError),
+                        max_tries=3,
+                        logger=logger)
+    async def fetch_arweave_data():
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                ARWEAVE_GRAPHQL_URL,
+                json={"query": query, "variables": variables}
+            ) as response:
+                response.raise_for_status()
+                return await response.json()
+    
+    try:
+        data = await fetch_arweave_data()
+        edges = data.get("data", {}).get("transactions", {}).get("edges")
+        if not edges:
+            return {
+                "process_id": process_id,
+                "alpha_score": 0,
+                "summary": "Ingen aktivitet funnet for denne prosessen",
+                "activity_metrics": {}
+            }
+        
+        # Analyze transactions
+        incoming_count = 0
+        outgoing_count = 0
+        unique_interactions = set()
+        latest_height = 0
+        earliest_height = float('inf')
+        
+        for edge in edges:
+            node = edge["node"]
+            height = node["block"]["height"] if node.get("block") else 0
+            latest_height = max(latest_height, height)
+            earliest_height = min(earliest_height, height)
+            
+            is_outgoing = False
+            is_incoming = False
+            
+            for tag in node["tags"]:
+                if tag["name"] == "From-Process" and tag["value"] == process_id:
+                    is_outgoing = True
+                elif tag["name"] in ["Target", "Recipient"] and tag["value"] == process_id:
+                    is_incoming = True
+                elif tag["name"] == "From-Process":
+                    unique_interactions.add(tag["value"])
+                elif tag["name"] in ["Target", "Recipient"]:
+                    unique_interactions.add(tag["value"])
+            
+            if is_outgoing:
+                outgoing_count += 1
+            if is_incoming:
+                incoming_count += 1
+        
+        # Calculate metrics
+        total_transactions = len(edges)
+        activity_frequency = total_transactions
+        unique_count = len(unique_interactions)
+        response_rate = outgoing_count / incoming_count if incoming_count > 0 else 0
+        
+        # Calculate alpha_score
+        base_score = min(activity_frequency * 5, 50)  # Max 50 for activity
+        interaction_score = min(unique_count * 5, 30)  # Max 30 for interactions
+        response_score = min(response_rate * 20, 20)  # Max 20 for response rate
+        
+        alpha_score = min(base_score + interaction_score + response_score, 100)
+        
+        # Generate summary
+        summary_parts = []
+        if alpha_score >= 80:
+            summary_parts.append("Prosessen er svært aktiv med mange interaksjoner.")
+        elif alpha_score >= 50:
+            summary_parts.append("Prosessen har moderat aktivitet.")
+        else:
+            summary_parts.append("Prosessen har lav aktivitet.")
+        
+        summary_parts.append(f"Totalt meldinger: {total_transactions}")
+        summary_parts.append(f"Unike interaksjoner: {unique_count}")
+        summary_parts.append(f"Responsrate: {response_rate:.2f}")
+        
+        return {
+            "process_id": process_id,
+            "alpha_score": alpha_score,
+            "summary": " ".join(summary_parts),
+            "activity_metrics": {
+                "total_transactions": total_transactions,
+                "incoming_count": incoming_count,
+                "outgoing_count": outgoing_count,
+                "unique_interactions": unique_count,
+                "response_rate": response_rate,
+                "height_range": [earliest_height, latest_height]
+            }
+        }
+    
+    except Exception as e:
+        logger.error(f"Error during detailed triage for process {process_id}: {str(e)}")
+        return {
+            "process_id": process_id,
+            "alpha_score": 0,
+            "summary": f"Kunne ikke utføre detaljert helseundersøkelse: {str(e)}",
+            "error": str(e)
+        }
+
+@mcp.tool()
 async def scan_recent_ao_alpha(limit: int = 5) -> list:
     """Scanner for de nyeste AO-prosessene basert på aktivitet og returnerer deres Alpha-Score."""
     query = """
