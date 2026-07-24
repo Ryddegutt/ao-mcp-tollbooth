@@ -265,8 +265,9 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
         if not edges:
             return []
         
-        # Count occurrences of each process ID from valid sources only
-        pid_counter = {}
+        # Collect all candidate process IDs from valid tags
+        candidate_pids = []
+        valid_tag_names = ["Process", "Target", "From-Process", "Recipient"]
         
         for edge in edges:
             node = edge["node"]
@@ -276,13 +277,19 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
             is_process_creation = any(tag.get("name") == "Type" and tag.get("value") == "Process" for tag in tags)
             node_id = node.get("id", "")
             if is_process_creation and len(node_id) == 43:
-                pid_counter[node_id] = pid_counter.get(node_id, 0) + 1
+                candidate_pids.append(node_id)
             
-            # Check for Process tags
+            # Check for valid tags
             for tag in tags:
-                if tag.get("name") == "Process" and len(tag.get("value", "")) == 43:
-                    pid = tag["value"]
-                    pid_counter[pid] = pid_counter.get(pid, 0) + 1
+                tag_name = tag.get("name", "")
+                tag_value = tag.get("value", "")
+                if tag_name in valid_tag_names and len(tag_value) == 43:
+                    candidate_pids.append(tag_value)
+        
+        # Count occurrences of each PID
+        pid_counter = {}
+        for pid in candidate_pids:
+            pid_counter[pid] = pid_counter.get(pid, 0) + 1
         
         # Filter out known non-process IDs and invalid patterns
         known_non_processes = {
@@ -302,6 +309,16 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
         
         logger.info(f"Fetched {len(edges)} transactions, found {len(pid_counter)} candidate process IDs")
         logger.info(f"Top 20 candidate processes: {candidate_pids}")
+        
+        # If no candidates found, use fallback list
+        if not candidate_pids:
+            logger.warning("No candidate process IDs found, using fallback list")
+            fallback_pids = [
+                "qNvAoz0TgcH7DMg8BCVn8jF32QH5L6T29VjHxhHqqGE",  # Mainnet AO
+                "UOLxq8qA0LfdgFvY8rQeTgrjdbhG5_0x9VYFhHyuJXc",  # Known active process
+                "VFr3Bk-uM-motpNNkkF8sipY1K-sy8ULuGjQh4akgqY"   # Another active process
+            ]
+            candidate_pids = fallback_pids[:min(limit, len(fallback_pids))]
         
         # Run triage for each candidate process
         triage_tasks = [get_ao_process_triage(pid) for pid in candidate_pids]
