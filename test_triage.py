@@ -2,7 +2,7 @@ import asyncio
 import json
 import sys
 import aiohttp
-from server import get_ao_process_triage, scan_recent_ao_alpha, ARWEAVE_GRAPHQL_URL
+from server import get_ao_process_triage, scan_recent_ao_alpha, triage_process, ARWEAVE_GRAPHQL_URL
 
 async def find_live_ao_process():
     """Find an actively used AO process by searching for recent messages"""
