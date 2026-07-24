@@ -264,20 +264,39 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
         if not edges:
             return []
         
-        # Extract unique Process IDs (43 characters) from multiple tag names, in order of appearance
-        unique_process_ids = []
-        seen = set()
+        # Extract candidate process IDs: any 43-character string in tags or transaction ID
+        candidate_pids = set()
         for edge in edges:
-            for tag in edge["node"]["tags"]:
-                if tag["name"] in ["Process", "Target", "Recipient", "From-Process"] and len(tag["value"]) == 43:
-                    pid = tag["value"]
-                    if pid not in seen:
-                        seen.add(pid)
-                        unique_process_ids.append(pid)
-                        if len(unique_process_ids) >= limit:
-                            break   # break inner loop
-            if len(unique_process_ids) >= limit:
-                break   # break outer loop
+            node = edge["node"]
+            # Consider transaction ID itself as candidate
+            if len(node["id"]) == 43:
+                candidate_pids.add(node["id"])
+            # Check all tag values
+            for tag in node["tags"]:
+                value = tag["value"]
+                if len(value) == 43:
+                    candidate_pids.add(value)
+        
+        # Filter out known non-process IDs (like module contracts)
+        known_non_processes = {
+            "TZ7oYyD_3NlXqW3q3eJ3bN3gZk7q3q3eJ3bN3gZk7q3q3eJ3bN3gZk"  # Example module contract
+        }
+        candidate_pids -= known_non_processes
+        
+        # Convert to list and take up to 'limit' unique ones
+        unique_process_ids = list(candidate_pids)[:limit]
+        
+        logger.info(f"Fetched {len(edges)} transactions, found {len(candidate_pids)} candidate process IDs, using {len(unique_process_ids)}")
+        
+        # If no candidates found, use fallback list
+        if not unique_process_ids:
+            logger.warning("No candidate process IDs found, using fallback list")
+            fallback_pids = [
+                "qNvAoz0TgcH7DMg8BCVn8jF32QH5L6T29VjHxhHqqGE",  # Mainnet AO
+                "UOLxq8qA0LfdgFvY8rQeTgrjdbhG5_0x9VYFhHyuJXc",  # Known active process
+                "VFr3Bk-uM-motpNNkkF8sipY1K-sy8ULuGjQh4akgqY"   # Another active process
+            ]
+            unique_process_ids = fallback_pids[:limit]
         
         # Run triage for each process
         triage_tasks = [get_ao_process_triage(pid) for pid in unique_process_ids]
