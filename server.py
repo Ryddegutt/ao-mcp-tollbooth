@@ -222,5 +222,71 @@ async def get_ao_process_triage(process_id: str) -> dict:
             "error": str(e)
         }
 
+@mcp.tool()
+async def scan_recent_ao_alpha(limit: int = 5) -> list:
+    """Scanner for de nyeste AO-prosessene basert på aktivitet og returnerer deres Alpha-Score."""
+    query = """
+    {
+      transactions(
+        tags: [{name: "Data-Protocol", values: ["ao"]}]
+        sort: HEIGHT_DESC
+        first: %d
+      ) {
+        edges {
+          node {
+            tags {
+              name
+              value
+            }
+          }
+        }
+      }
+    }
+    """ % (limit * 2)  # Fetch extra to account for duplicates
+    
+    @backoff.on_exception(backoff.expo,
+                        (aiohttp.ClientError, asyncio.TimeoutError),
+                        max_tries=3,
+                        logger=logger)
+    async def fetch_arweave_data():
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                ARWEAVE_GRAPHQL_URL,
+                json={"query": query}
+            ) as response:
+                response.raise_for_status()
+                return await response.json()
+    
+    try:
+        data = await fetch_arweave_data()
+        edges = data.get("data", {}).get("transactions", {}).get("edges")
+        if not edges:
+            return []
+        
+        # Extract unique Process IDs (43 characters)
+        process_ids = set()
+        for edge in edges:
+            for tag in edge["node"]["tags"]:
+                if tag["name"] == "Process" and len(tag["value"]) == 43:
+                    process_ids.add(tag["value"])
+                    if len(process_ids) >= limit:
+                        break
+        
+        # Run triage for each process
+        triage_tasks = [get_ao_process_triage(pid) for pid in list(process_ids)[:limit]]
+        results = await asyncio.gather(*triage_tasks)
+        
+        # Return simplified results with process_id and alpha_score
+        return [{
+            "process_id": res["process_id"],
+            "alpha_score": res["alpha_score"],
+            "summary": res["summary"]
+        } for res in results]
+    
+    except Exception as e:
+        logger.error(f"Error scanning recent AO processes: {str(e)}")
+        return [{"error": f"Kunne ikke skanne prosesser: {str(e)}"}]
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

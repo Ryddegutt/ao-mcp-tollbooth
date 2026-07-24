@@ -2,7 +2,7 @@ import asyncio
 import json
 import sys
 import aiohttp
-from server import get_ao_process_triage, ARWEAVE_GRAPHQL_URL
+from server import get_ao_process_triage, scan_recent_ao_alpha, ARWEAVE_GRAPHQL_URL
 
 async def find_live_ao_process():
     """Find an actively used AO process by searching for recent messages"""
@@ -45,15 +45,26 @@ async def find_live_ao_process():
 async def run_triage(process_id):
     return await get_ao_process_triage(process_id)
 
+async def run_scan(limit):
+    return await scan_recent_ao_alpha(limit)
+
 async def main():
     if len(sys.argv) > 1:
-        process_id = sys.argv[1]
+        if sys.argv[1] == "scan":
+            limit = int(sys.argv[2]) if len(sys.argv) > 2 else 5
+            print(f"Scanning {limit} recent AO processes...")
+            result = await run_scan(limit)
+            print(json.dumps(result, indent=2))
+        else:
+            process_id = sys.argv[1]
+            print(f"Running triage for process: {process_id}")
+            result = await run_triage(process_id)
+            print(json.dumps(result, indent=2))
     else:
         process_id = await find_live_ao_process()
-        
-    print(f"Running triage for process: {process_id}")
-    result = await run_triage(process_id)
-    print(json.dumps(result, indent=2))
+        print(f"Running triage for process: {process_id}")
+        result = await run_triage(process_id)
+        print(json.dumps(result, indent=2))
 
 if __name__ == "__main__":
     asyncio.run(main())
