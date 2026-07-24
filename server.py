@@ -314,11 +314,12 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
         logger.info(f"Fetched {len(edges)} transactions, found {len(pid_counter)} candidate process IDs")
         logger.info(f"Top 20 candidate processes: {candidate_pids}")
         
-        # Define fallback list with 5 known active processes
+        # Define fallback list with 6 known active processes
         fallback_pids = [
             "qNvAoz0TgcH7DMg8BCVn8jF32QH5L6T29VjHxhHqqGE",  # Mainnet AO
             "NGa_4-iSCnUE6UQ6xir2mnqGiRB0Cje4G3AA3FGXsZw",   # Known active process
             "0zPkVRBOUf8O6R9SqDEQZVYcaPO2bf2Z4cKLcheF_RM",   # Another active process
+            "8U9doJvZsQTkbg3b0aGX1dAgOWbh94-9UBpuaxJ7BvA",   # Another active process
             "0Kispy43fkzf_CqA0NqnYEg7KfrLWoiiDZ_rHgnwGR0",   # Another active process
             "VFr3Bk-uM-motpNNkkF8sipY1K-sy8ULuGjQh4akgqY"    # Another active process
         ]
@@ -348,8 +349,6 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
                 fallback_tasks = [get_ao_process_triage(pid) for pid in needed_fallback]
                 fallback_results = await asyncio.gather(*fallback_tasks)
                 for res in fallback_results:
-                    if len(active_processes) >= limit:
-                        break
                     if res.get("alpha_score", 0) > 0 and res["process_id"] not in active_ids:
                         active_processes.append({
                             "process_id": res["process_id"],
