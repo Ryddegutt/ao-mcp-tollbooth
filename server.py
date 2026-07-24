@@ -226,18 +226,11 @@ async def get_ao_process_triage(process_id: str) -> dict:
 async def triage_process(process_id: str) -> dict:
     """Utfører en detaljert helseundersøkelse på en AO-prosess basert på aktivitet."""
     query = """
-    query($pid: String!) {
+    {
       transactions(
-        tags: [
-          {name: "Data-Protocol", values: ["ao"]},
-          {operator: OR, tags: [
-            {name: "From-Process", values: [$pid]},
-            {name: "Target", values: [$pid]},
-            {name: "Recipient", values: [$pid]}
-          ]}
-        ]
+        tags: [{name: "Data-Protocol", values: ["ao"]}]
         sort: HEIGHT_DESC
-        first: 20
+        first: 100
       ) {
         edges {
           node {
@@ -255,7 +248,6 @@ async def triage_process(process_id: str) -> dict:
       }
     }
     """
-    variables = {"pid": process_id}
     
     @backoff.on_exception(backoff.expo,
                         (aiohttp.ClientError, asyncio.TimeoutError),
@@ -266,7 +258,7 @@ async def triage_process(process_id: str) -> dict:
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(
                 ARWEAVE_GRAPHQL_URL,
-                json={"query": query, "variables": variables}
+                json={"query": query}
             ) as response:
                 response.raise_for_status()
                 return await response.json()
@@ -277,19 +269,51 @@ async def triage_process(process_id: str) -> dict:
         if not edges:
             return {
                 "process_id": process_id,
-                "alpha_score": 0,
-                "summary": "Ingen aktivitet funnet for denne prosessen",
+                "alpha_score": 50,
+                "summary": "Ingen nylige AO-meldinger funnet i utvalget. Bruker fallback alpha_score.",
                 "activity_metrics": {}
             }
         
-        # Analyze transactions
+        # Filter transactions to keep only those involving the process_id
+        matching_edges = []
+        for edge in edges:
+            node = edge["node"]
+            tags = node.get("tags", [])
+            node_id = node.get("id", "")
+            
+            # Check if this transaction is related to the process_id
+            is_related = False
+            if node_id == process_id:  # Process creation transaction
+                is_related = True
+            else:
+                for tag in tags:
+                    tag_name = tag.get("name", "")
+                    tag_value = tag.get("value", "")
+                    if tag_name in ["Process", "Target", "Recipient", "From-Process"] and tag_value == process_id:
+                        is_related = True
+                        break
+            
+            if is_related:
+                matching_edges.append(edge)
+                if len(matching_edges) >= 20:  # Limit to 20 matching transactions
+                    break
+        
+        if not matching_edges:
+            return {
+                "process_id": process_id,
+                "alpha_score": 50,
+                "summary": "Ingen nylige meldinger for denne prosessen funnet i utvalget. Bruker fallback alpha_score.",
+                "activity_metrics": {}
+            }
+        
+        # Analyze matching transactions
         incoming_count = 0
         outgoing_count = 0
         unique_interactions = set()
         latest_height = 0
         earliest_height = float('inf')
         
-        for edge in edges:
+        for edge in matching_edges:
             node = edge["node"]
             height = node["block"]["height"] if node.get("block") else 0
             latest_height = max(latest_height, height)
@@ -314,7 +338,7 @@ async def triage_process(process_id: str) -> dict:
                 incoming_count += 1
         
         # Calculate metrics
-        total_transactions = len(edges)
+        total_transactions = len(matching_edges)
         activity_frequency = total_transactions
         unique_count = len(unique_interactions)
         response_rate = outgoing_count / incoming_count if incoming_count > 0 else 0
