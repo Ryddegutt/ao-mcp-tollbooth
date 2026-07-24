@@ -265,25 +265,24 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
         if not edges:
             return []
         
-        # Count occurrences of each process ID and track sources
+        # Count occurrences of each process ID from valid sources only
         pid_counter = {}
-        pid_sources = {}
         
         for edge in edges:
             node = edge["node"]
-            # Consider transaction ID itself as candidate
-            node_id = node.get("id", "")
-            if len(node_id) == 43:
-                pid_counter[node_id] = pid_counter.get(node_id, 0) + 1
-                pid_sources[node_id] = pid_sources.get(node_id, set()) | {"transaction_id"}
+            tags = node.get("tags", [])
             
-            # Check all tag values
-            for tag in node.get("tags", []):
-                value = tag.get("value", "")
-                if len(value) == 43:
-                    pid_counter[value] = pid_counter.get(value, 0) + 1
-                    source_name = tag.get("name", "")
-                    pid_sources[value] = pid_sources.get(value, set()) | {source_name}
+            # Check if this is a Process creation transaction (Type=Process)
+            is_process_creation = any(tag.get("name") == "Type" and tag.get("value") == "Process" for tag in tags)
+            node_id = node.get("id", "")
+            if is_process_creation and len(node_id) == 43:
+                pid_counter[node_id] = pid_counter.get(node_id, 0) + 1
+            
+            # Check for Process tags
+            for tag in tags:
+                if tag.get("name") == "Process" and len(tag.get("value", "")) == 43:
+                    pid = tag["value"]
+                    pid_counter[pid] = pid_counter.get(pid, 0) + 1
         
         # Filter out known non-process IDs and invalid patterns
         known_non_processes = {
@@ -297,49 +296,31 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
             and not all(c == pid[0] for c in pid)
         ]
         
-        # Assign priority scores based on source tags
-        priority_scores = []
-        for pid in filtered_pids:
-            sources = pid_sources.get(pid, set())
-            priority = 0
-            if "Process" in sources:
-                priority = 3
-            elif "Target" in sources:
-                priority = 2
-            elif "Recipient" in sources or "From-Process" in sources:
-                priority = 1
-            
-            priority_scores.append((pid, pid_counter[pid], priority))
-        
-        # Sort by frequency (descending) then priority (descending)
-        priority_scores.sort(key=lambda x: (-x[1], -x[2]))
-        
-        # Take top 'limit' unique ones
-        unique_process_ids = [pid for pid, _, _ in priority_scores[:limit]]
+        # Sort by frequency (descending) and take top 20 candidates
+        sorted_pids = sorted(filtered_pids, key=lambda pid: pid_counter[pid], reverse=True)
+        candidate_pids = sorted_pids[:20]
         
         logger.info(f"Fetched {len(edges)} transactions, found {len(pid_counter)} candidate process IDs")
-        logger.info(f"Top {limit} processes: {unique_process_ids}")
+        logger.info(f"Top 20 candidate processes: {candidate_pids}")
         
-        # If no candidates found, use fallback list
-        if not unique_process_ids:
-            logger.warning("No candidate process IDs found, using fallback list")
-            fallback_pids = [
-                "qNvAoz0TgcH7DMg8BCVn8jF32QH5L6T29VjHxhHqqGE",  # Mainnet AO
-                "UOLxq8qA0LfdgFvY8rQeTgrjdbhG5_0x9VYFhHyuJXc",  # Known active process
-                "VFr3Bk-uM-motpNNkkF8sipY1K-sy8ULuGjQh4akgqY"   # Another active process
-            ]
-            unique_process_ids = fallback_pids[:limit]
+        # Run triage for each candidate process
+        triage_tasks = [get_ao_process_triage(pid) for pid in candidate_pids]
+        triage_results = await asyncio.gather(*triage_tasks)
         
-        # Run triage for each process
-        triage_tasks = [get_ao_process_triage(pid) for pid in unique_process_ids]
-        results = await asyncio.gather(*triage_tasks)
+        # Filter out processes with alpha_score 0 and take up to 'limit'
+        active_processes = []
+        for res in triage_results:
+            if res.get("alpha_score", 0) > 0:
+                active_processes.append({
+                    "process_id": res["process_id"],
+                    "alpha_score": res["alpha_score"],
+                    "summary": res["summary"]
+                })
+                if len(active_processes) >= limit:
+                    break
         
-        # Return simplified results with process_id and alpha_score
-        return [{
-            "process_id": res["process_id"],
-            "alpha_score": res["alpha_score"],
-            "summary": res["summary"]
-        } for res in results]
+        logger.info(f"Found {len(active_processes)} active processes")
+        return active_processes
     
     except Exception as e:
         logger.error(f"Error scanning recent AO processes: {str(e)}")
