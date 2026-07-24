@@ -230,7 +230,7 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
       transactions(
         tags: [{name: "Data-Protocol", values: ["ao"]}]
         sort: HEIGHT_DESC
-        first: %d
+        first: 100
       ) {
         edges {
           node {
@@ -242,7 +242,7 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
         }
       }
     }
-    """ % (limit * 2)  # Fetch extra to account for duplicates
+    """   # Fetch 100 transactions to get more coverage
     
     @backoff.on_exception(backoff.expo,
                         (aiohttp.ClientError, asyncio.TimeoutError),
@@ -264,17 +264,23 @@ async def scan_recent_ao_alpha(limit: int = 5) -> list:
         if not edges:
             return []
         
-        # Extract unique Process IDs (43 characters)
-        process_ids = set()
+        # Extract unique Process IDs (43 characters) from multiple tag names, in order of appearance
+        unique_process_ids = []
+        seen = set()
         for edge in edges:
             for tag in edge["node"]["tags"]:
-                if tag["name"] == "Process" and len(tag["value"]) == 43:
-                    process_ids.add(tag["value"])
-                    if len(process_ids) >= limit:
-                        break
+                if tag["name"] in ["Process", "Target", "Recipient", "From-Process"] and len(tag["value"]) == 43:
+                    pid = tag["value"]
+                    if pid not in seen:
+                        seen.add(pid)
+                        unique_process_ids.append(pid)
+                        if len(unique_process_ids) >= limit:
+                            break   # break inner loop
+            if len(unique_process_ids) >= limit:
+                break   # break outer loop
         
         # Run triage for each process
-        triage_tasks = [get_ao_process_triage(pid) for pid in list(process_ids)[:limit]]
+        triage_tasks = [get_ao_process_triage(pid) for pid in unique_process_ids]
         results = await asyncio.gather(*triage_tasks)
         
         # Return simplified results with process_id and alpha_score
