@@ -9,7 +9,20 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-ARWEAVE_GRAPHQL_URL = "https://arweave-search.goldsky.com/graphql"
+# Primary decentralized gateways
+ARWEAVE_GRAPHQL_URL = "https://arweave.net/graphql"
+AO_GRAPHQL_URL = "https://ao.arweave.dev/graphql"
+
+# Fallback gateways
+FALLBACK_GATEWAYS = [
+    "https://arweave-search.goldsky.com/graphql",
+    "https://ao-gateway.xyz/graphql"
+]
+
+# Protocol standards
+PROCESS_STANDARD = "~process@1.0"
+SWAP_STANDARD = "~arweave-swap@1.0"
+TOKEN_STANDARD = "~pot@1.0"
 
 # Initialiser MCP-serveren
 mcp = FastMCP("ao-tollbooth")
@@ -36,15 +49,32 @@ async def inspect_ao_process(process_id: str) -> str:
     async def fetch_arweave_data():
         timeout = aiohttp.ClientTimeout(total=30)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(
-                ARWEAVE_GRAPHQL_URL,
-                json={"query": query, "variables": variables}
-            ) as response:
-                response.raise_for_status()
-                data = await response.json()
-                if data.get("data", {}).get("transactions", {}).get("edges"):
-                    return f"AO Process {process_id} found on-chain. Type: aos."
-                return f"AO Process {process_id} could not be verified on-chain (it might be newly created or invalid)."
+            # Try primary gateway first
+            try:
+                async with session.post(
+                    AO_GRAPHQL_URL,
+                    json={"query": query, "variables": variables}
+                ) as response:
+                    response.raise_for_status()
+                    data = await response.json()
+                    if data.get("data", {}).get("transactions", {}).get("edges"):
+                        return f"AO Process {process_id} found on-chain. Type: aos."
+            except Exception as primary_error:
+                logger.warning(f"Primary gateway failed, trying fallbacks: {primary_error}")
+                for gateway in FALLBACK_GATEWAYS:
+                    try:
+                        async with session.post(
+                            gateway,
+                            json={"query": query, "variables": variables}
+                        ) as response:
+                            response.raise_for_status()
+                            data = await response.json()
+                            if data.get("data", {}).get("transactions", {}).get("edges"):
+                                return f"AO Process {process_id} found on-chain (via fallback). Type: aos."
+                    except Exception:
+                        continue
+            
+            return f"AO Process {process_id} could not be verified on-chain (it might be newly created or invalid)."
     
     try:
         return await fetch_arweave_data()
@@ -312,6 +342,8 @@ async def triage_process(process_id: str) -> dict:
         unique_interactions = set()
         latest_height = 0
         earliest_height = float('inf')
+        financial_interactions = 0
+        is_verified_process = False
         
         for edge in matching_edges:
             node = edge["node"]
@@ -323,14 +355,24 @@ async def triage_process(process_id: str) -> dict:
             is_incoming = False
             
             for tag in node["tags"]:
-                if tag["name"] == "From-Process" and tag["value"] == process_id:
+                tag_name = tag.get("name", "")
+                tag_value = tag.get("value", "")
+                
+                # Check for protocol standards
+                if tag_name == "Protocol-Version" and tag_value == PROCESS_STANDARD:
+                    is_verified_process = True
+                elif tag_name == "Action" and tag_value in [SWAP_STANDARD, TOKEN_STANDARD]:
+                    financial_interactions += 1
+                
+                # Track process interactions
+                if tag_name == "From-Process" and tag_value == process_id:
                     is_outgoing = True
-                elif tag["name"] in ["Target", "Recipient"] and tag["value"] == process_id:
+                elif tag_name in ["Target", "Recipient"] and tag_value == process_id:
                     is_incoming = True
-                elif tag["name"] == "From-Process":
-                    unique_interactions.add(tag["value"])
-                elif tag["name"] in ["Target", "Recipient"]:
-                    unique_interactions.add(tag["value"])
+                elif tag_name == "From-Process":
+                    unique_interactions.add(tag_value)
+                elif tag_name in ["Target", "Recipient"]:
+                    unique_interactions.add(tag_value)
             
             if is_outgoing:
                 outgoing_count += 1
@@ -343,12 +385,20 @@ async def triage_process(process_id: str) -> dict:
         unique_count = len(unique_interactions)
         response_rate = outgoing_count / incoming_count if incoming_count > 0 else 0
         
-        # Calculate alpha_score
+        # Calculate alpha_score with new metrics
         base_score = min(activity_frequency * 5, 50)  # Max 50 for activity
         interaction_score = min(unique_count * 5, 30)  # Max 30 for interactions
         response_score = min(response_rate * 20, 20)  # Max 20 for response rate
         
-        alpha_score = min(base_score + interaction_score + response_score, 100)
+        # Add verification and financial bonuses
+        verification_bonus = 20 if is_verified_process else 0
+        financial_bonus = min(financial_interactions * 3, 30)  # Max 30 for financial activity
+        
+        alpha_score = min(
+            base_score + interaction_score + response_score + 
+            verification_bonus + financial_bonus, 
+            100
+        )
         
         # Generate summary
         summary_parts = []
@@ -373,7 +423,9 @@ async def triage_process(process_id: str) -> dict:
                 "outgoing_count": outgoing_count,
                 "unique_interactions": unique_count,
                 "response_rate": response_rate,
-                "height_range": [earliest_height, latest_height]
+                "height_range": [earliest_height, latest_height],
+                "is_verified_process": is_verified_process,
+                "financial_interactions_count": financial_interactions
             }
         }
     
