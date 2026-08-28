@@ -27,6 +27,16 @@ TOKEN_STANDARD = "~pot@1.0"
 # Initialiser MCP-serveren
 mcp = FastMCP("ao-tollbooth")
 
+
+def calculate_financial_risk_score(
+    financial_interactions_count: int,
+    is_verified_process: bool
+) -> int:
+    """Beregner en finansiell risiko-score fra 0 til 100."""
+    interaction_risk = min(max(financial_interactions_count, 0) * 10, 70)
+    verification_risk = 0 if is_verified_process else 30
+    return min(interaction_risk + verification_risk, 100)
+
 @mcp.tool()
 async def inspect_ao_process(process_id: str) -> str:
     """Inspekterer en spesifikk AO-prosess og returnerer status."""
@@ -399,6 +409,10 @@ async def triage_process(process_id: str) -> dict:
             verification_bonus + financial_bonus, 
             100
         )
+        financial_risk_score = calculate_financial_risk_score(
+            financial_interactions,
+            is_verified_process
+        )
         
         # Generate summary
         summary_parts = []
@@ -425,7 +439,8 @@ async def triage_process(process_id: str) -> dict:
                 "response_rate": response_rate,
                 "height_range": [earliest_height, latest_height],
                 "is_verified_process": is_verified_process,
-                "financial_interactions_count": financial_interactions
+                "financial_interactions_count": financial_interactions,
+                "financial_risk_score": financial_risk_score
             }
         }
     
