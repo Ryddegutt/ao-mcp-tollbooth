@@ -37,6 +37,15 @@ def calculate_financial_risk_score(
     verification_risk = 0 if is_verified_process else 30
     return min(interaction_risk + verification_risk, 100)
 
+
+def determine_agent_action(financial_risk_score: int, alpha_score: int) -> str:
+    """Bestemmer agentens handling basert på risiko og prosesshelse."""
+    if financial_risk_score >= 70 and alpha_score < 50:
+        return "BLOCK"
+    if financial_risk_score >= 40 or alpha_score < 60:
+        return "FLAG_FOR_REVIEW"
+    return "ALLOW"
+
 @mcp.tool()
 async def inspect_ao_process(process_id: str) -> str:
     """Inspekterer en spesifikk AO-prosess og returnerer status."""
@@ -245,9 +254,14 @@ async def get_ao_process_triage(process_id: str) -> dict:
         if "No recent activity" in activity:
             summary.append("Advarsel: Ingen nylig aktivitet detektert.")
         
+        financial_risk_score = 0
+        agent_action = determine_agent_action(financial_risk_score, alpha_score)
+
         return {
             "process_id": process_id,
             "alpha_score": alpha_score,
+            "financial_risk_score": financial_risk_score,
+            "agent_action": agent_action,
             "summary": " ".join(summary),
             "metadata": metadata,
             "recent_activity": activity
@@ -310,6 +324,8 @@ async def triage_process(process_id: str) -> dict:
             return {
                 "process_id": process_id,
                 "alpha_score": 50,
+                "financial_risk_score": 0,
+                "agent_action": determine_agent_action(0, 50),
                 "summary": "Ingen nylige AO-meldinger funnet i utvalget. Bruker fallback alpha_score.",
                 "activity_metrics": {}
             }
@@ -342,6 +358,8 @@ async def triage_process(process_id: str) -> dict:
             return {
                 "process_id": process_id,
                 "alpha_score": 50,
+                "financial_risk_score": 0,
+                "agent_action": determine_agent_action(0, 50),
                 "summary": "Ingen nylige meldinger for denne prosessen funnet i utvalget. Bruker fallback alpha_score.",
                 "activity_metrics": {}
             }
@@ -427,9 +445,13 @@ async def triage_process(process_id: str) -> dict:
         summary_parts.append(f"Unike interaksjoner: {unique_count}")
         summary_parts.append(f"Responsrate: {response_rate:.2f}")
         
+        agent_action = determine_agent_action(financial_risk_score, alpha_score)
+
         return {
             "process_id": process_id,
             "alpha_score": alpha_score,
+            "financial_risk_score": financial_risk_score,
+            "agent_action": agent_action,
             "summary": " ".join(summary_parts),
             "activity_metrics": {
                 "total_transactions": total_transactions,
@@ -449,6 +471,8 @@ async def triage_process(process_id: str) -> dict:
         return {
             "process_id": process_id,
             "alpha_score": 0,
+            "financial_risk_score": 0,
+            "agent_action": "FLAG_FOR_REVIEW",
             "summary": f"Kunne ikke utføre detaljert helseundersøkelse: {str(e)}",
             "error": str(e)
         }
