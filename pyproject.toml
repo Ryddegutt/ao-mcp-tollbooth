@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ao-mcp-tollbooth"
+version = "0.1.0"
+description = "Automated risk triage and security guardrails for AI agents on AO/Arweave"
+readme = "README.md"
+authors = [
+  { name = "Ryddegutt" }
+]
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=0.1.0",
+    "requests>=2.28.0",
+]
+
+[tool.setuptools]
+py-modules = ["server"]
+
+[project.urls]
+"Homepage" = "https://github.com/Ryddegutt/ao-mcp-tollbooth"
+"Bug Tracker" = "https://github.com/Ryddegutt/ao-mcp-tollbooth/issues"
