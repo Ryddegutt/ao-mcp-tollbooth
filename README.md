@@ -1,5 +1,14 @@
 🛡️ AO MCP Tollbooth
-An Model Context Protocol (MCP) server providing automated risk triage, liquidity checks, and security guardrails for AI agents operating on the AO / Arweave network.
+A Model Context Protocol (MCP) server providing automated risk triage, liquidity checks, and security guardrails for AI agents operating on the AO / Arweave network.
+
+🌐 Community & Ecosystem Integration
+ao-mcp-tollbooth is registered as a specialized Community Server for autonomous agents across the Web3 and AO ecosystems.
+
+Registry Entry: * [ao-mcp-tollbooth](https://github.com/Ryddegutt/ao-mcp-tollbooth) - Automated risk triage and security guardrails for AI agents on AO/Arweave.
+
+Category: Security, Risk Triage & Infrastructure
+
+Target Network: AO / Arweave Ecosystem
 
 🚀 Overview
 ao-mcp-tollbooth acts as an automated safety gate for autonomous agents. Before executing financial interactions or interacting with unknown processes on AO, agents pass process metadata to Tollbooth to receive a real-time risk assessment and actionable trigger responses.
@@ -21,9 +30,9 @@ Git
 
 Installation
 Bash
-git clone [https://github.com/Ryddegutt/ao-mcp-tollbooth.git](https://github.com/Ryddegutt/ao-mcp-tollbooth.git)
+git clone https://github.com/Ryddegutt/ao-mcp-tollbooth.git
 cd ao-mcp-tollbooth
-pip install -r requirements.txt
+pip install -e .
 💡 Usage
 Start the MCP server locally:
 
