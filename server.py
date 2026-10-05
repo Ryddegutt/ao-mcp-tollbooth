@@ -1,4 +1,5 @@
 import asyncio
+from payment import verify_ao_payment, REQUIRE_PAYMENT, TOLLBOOTH_WALLET_ADDRESS, PRICE_PER_TRIAGE_AO
 import aiohttp
 import backoff
 import json
@@ -277,8 +278,20 @@ async def get_ao_process_triage(process_id: str) -> dict:
         }
 
 @mcp.tool()
-async def triage_process(process_id: str) -> dict:
+async def triage_process(process_id: str, payment_tx_id: str = None) -> dict:
     """Utfører en detaljert helseundersøkelse på en AO-prosess basert på aktivitet."""
+    
+    # --- 1. BETALINGSPORT (Sjekkes helt først) ---
+    if REQUIRE_PAYMENT:
+        if not payment_tx_id or not verify_ao_payment(payment_tx_id):
+            return {
+                "status": "PAYMENT_REQUIRED",
+                "message": f"Betaling kreves. Vennligst send {PRICE_PER_TRIAGE_AO} $AO/$AR til {TOLLBOOTH_WALLET_ADDRESS} og oppgi transaksjons-ID i 'payment_tx_id'.",
+                "recipient_address": TOLLBOOTH_WALLET_ADDRESS,
+                "price": PRICE_PER_TRIAGE_AO
+            }
+
+    # --- 2. DIN EKSISTERENDE HENTELOGIKK ---
     query = """
     {
       transactions(
