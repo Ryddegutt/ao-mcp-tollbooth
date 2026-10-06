@@ -1,4 +1,5 @@
 🛡️ AO MCP Tollbooth
+
 A Model Context Protocol (MCP) server providing automated risk triage, liquidity checks, and security guardrails for AI agents operating on the AO / Arweave network.
 
 🌐 Community & Ecosystem Integration
@@ -14,31 +15,58 @@ Target Network: AO / Arweave Ecosystem
 ao-mcp-tollbooth acts as an automated safety gate for autonomous agents. Before executing financial interactions or interacting with unknown processes on AO, agents pass process metadata to Tollbooth to receive a real-time risk assessment and actionable trigger responses.
 
 Key Features
-GraphQL Process Triage: Fetches process history and transaction metadata directly via Arweave gateways.
+- GraphQL Process Triage: Fetches process history and transaction metadata directly via Arweave gateways.
+- Financial Risk Heuristics: Computes a normalized financial_risk_score (0–100) based on verified credentials, transaction volume, and interaction history.
+- Agent Decision Triggers: Emits standardized actions (ALLOW, FLAG_FOR_REVIEW, BLOCK) for seamless integration with LLM decision loops.
+- Monetized Tollbooth Gate: Pay-per-use verification layer powered by $AO microtransactions.
 
-Financial Risk Heuristics: Computes a normalized financial_risk_score (0–100) based on verified credentials, transaction volume, and interaction history.
+💳 Monetization & Payment Gate (v0.2.0)
 
-Agent Decision Triggers: Emits standardized actions (ALLOW, FLAG_FOR_REVIEW, BLOCK) for seamless integration with LLM decision loops.
+This MCP server features an automated pay-per-use tollbooth powered by the AO Network / Arweave.
 
-Zero Overhead: Pure local computation for triage execution with minimal network latency.
+### Payment Details
+- Cost per Triage Call: 0.001 $AO
+- Recipient Wallet Address: qh28RzVBtCyMkTBZSXmpp_ioNassydJru-rgnjA2ns0
+- Accepted Token: $AO
+
+### How It Works for AI Agents & Clients
+1. Send a transaction of at least 0.001 $AO to the recipient wallet address above via the AO Network.
+2. Obtain the transaction ID (tx_id).
+3. Include the transaction ID in your tool call parameter:
+```json
+{
+  "process_id": "YOUR_PROCESS_ID",
+  "payment_tx_id": "YOUR_AO_TRANSACTION_ID"
+}
+The server automatically verifies the transaction on-chain (verifying recipient, amount, and execution status) before executing the triage analysis.
 
 🛠️ Quickstart
 Prerequisites
+
 Python 3.10+
 
 Git
 
 Installation
+
 Bash
 git clone https://github.com/Ryddegutt/ao-mcp-tollbooth.git
 cd ao-mcp-tollbooth
 pip install -e .
+Configuration
+Create a .env file in the root directory:
+
+Kodebit
+TOLLBOOTH_WALLET_ADDRESS=qh28RzVBtCyMkTBZSXmpp_ioNassydJru-rgnjA2ns0
+PRICE_PER_TRIAGE_AO=0.001
+REQUIRE_PAYMENT=true
 💡 Usage
 Start the MCP server locally:
 
 Bash
 python server.py
 Response Schema Example
+
 JSON
 {
   "process_id": "0x123...abc",
