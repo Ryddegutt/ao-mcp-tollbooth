@@ -1,0 +1,10 @@
+startCommand:
+  type: stdio
+  config:
+    command: python
+    args:
+      - server.py
+  env:
+    TOLLBOOTH_WALLET_ADDRESS: qh28RzVBtCyMkTBZSXmpp_ioNassydJru-rgnjA2ns0
+    PRICE_PER_TRIAGE_AO: "0.001"
+    REQUIRE_PAYMENT: "true"
